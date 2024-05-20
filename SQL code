@@ -1,1 +1,420 @@
 ```sql
+---1. Sales Performance
+
+--- Top Selling Products
+SELECT
+		Product_Name AS Products,
+		SUM(Units_Sold) AS Sales,
+		ROW_NUMBER() OVER (ORDER BY SUM(Units_Sold) DESC) RANKÍNG
+FROM 
+		nigeria_agricultural_exports
+GROUP BY
+		Product_Name
+		;
+
+--- Revenue by Company
+SELECT
+		Company,
+		Sales_Revenue
+		
+FROM (
+		SELECT 
+				Company,
+				ROUND(SUM(Export_Value),0) AS Sales_Revenue,
+				ROW_NUMBER() OVER (ORDER BY SUM(Export_Value) DESC) RANKING
+		FROM
+				nigeria_agricultural_exports
+		GROUP BY
+				Company) AS sub_table
+WHERE 
+		RANKING = 1;
+
+---Sales by company
+SELECT
+		Company,
+		SUM(Units_Sold) AS Sales,
+		ROW_NUMBER() OVER (ORDER BY SUM(Units_Sold) DESC) AS RANKING
+FROM 
+		nigeria_agricultural_exports
+GROUP BY 
+		Company
+;
+
+---Further Investigation
+
+--- For Agro Export Nigeria Ltd
+SELECT
+      Product_Name AS Products,
+      SUM(Units_Sold) AS Units_Sold,
+      SUM(Export_Value) AS Revenue,
+      ROUND((SUM(Export_Value) * 100 )/ (SELECT SUM(Export_Value) FROM nigeria_agricultural_exports WHERE Company = 'Agro Export Nigeria Ltd'),2) AS PR,
+	    ROUND((SUM(Profit_per_unit * Units_sold) / NULLIF(SUM(Export_value), 0)),3) * 100 AS Profit_margin
+FROM
+      nigeria_agricultural_exports
+WHERE
+      Company = 'Agro Export Nigeria Ltd'
+GROUP BY
+      Product_Name
+ORDER BY
+      PR DESC,
+      Units_Sold DESC;
+
+
+--- For Golden Farms Nigeria Limited
+SELECT
+      Product_Name AS Products,
+      SUM(Units_Sold) AS Units_Sold,
+      SUM(Export_Value) AS Revenue,
+      ROUND( (SUM(Export_Value) * 100 )/ (SELECT SUM(Export_Value) FROM nigeria_agricultural_exports WHERE Company = 'Golden Farms Nigeria Limited'),2) AS PR,
+	    ROUND((SUM(Profit_per_unit * Units_sold) / NULLIF(SUM(Export_value), 0)),3) * 100 AS Profit_margin
+FROM
+      nigeria_agricultural_exports
+WHERE
+      Company = 'Golden Farms Nigeria Limited'
+GROUP BY
+      Product_Name
+ORDER BY
+    PR DESC,
+    Units_Sold DESC;
+
+---4.	How sales vary across different export countries
+SELECT
+		Export_Country,
+		SUM(Units_Sold) AS Sales
+	
+FROM 
+		nigeria_agricultural_exports
+GROUP BY
+		Export_Country
+ORDER BY
+		Sales DESC
+	;
+
+--- Product Sales across export countries
+SELECT
+	Product_Name,
+	Export_Country,
+	SUM(Units_Sold) AS Sales
+	S
+FROM 
+	nigeria_agricultural_exports
+GROUP BY
+	Product_Name,
+	Export_Country
+	;
+
+---average revenue per export country
+SELECT
+	Export_Country,
+	ROUND(AVG(Export_Value),0) AS Avg_Revenue
+FROM 
+	nigeria_agricultural_exports
+GROUP BY
+	Export_Country;
+
+--- Sales across export countries
+
+SELECT 
+	Export_Country,
+	SUM(Units_Sold) AS Sales
+FROM
+	nigeria_agricultural_exports
+GROUP BY
+	Export_Country;
+
+---correlation between the units sold and the profit generated
+SELECT
+	
+	Units_Sold,
+	(Profit_per_unit * Units_Sold ) AS Profit_generated
+FROM
+	nigeria_agricultural_exports;
+
+---relationship between the date of purchase and the profit margin
+
+With temp AS (
+				SELECT
+						YEAR(date) AS Purchase_Year,
+						ROUND(SUM(Profit_per_unit * Units_sold),0) AS Profit_per_sale,
+						ROUND(SUM(Export_value),0) AS Total_Export_value,
+						ROUND((SUM(Profit_per_unit * Units_sold) / NULLIF(SUM(Export_value), 0)),2) * 100 AS Profit_margin
+				FROM
+						nigeria_agricultural_exports 
+				GROUP BY
+						date)
+SELECT
+	Purchase_Year,
+	---Profit_per_sale,
+   ---- Total_Export_value,
+    Profit_margin	
+FROM
+	temp
+;
+
+--- Profitability across the Months
+With temp_CTE AS (
+				SELECT
+						MONTH(date) AS MONTH_NAME,
+						ROUND(SUM(Profit_per_unit * Units_sold),0) AS Profit_per_sale,
+						ROUND(SUM(Export_value),0) AS Total_Export_value,
+						ROUND((SUM(Profit_per_unit * Units_sold) / NULLIF(SUM(Export_value), 0)),3) * 100 AS Profit_margin
+				FROM
+						nigeria_agricultural_exports 
+				GROUP BY
+						MONTH(date))
+SELECT
+	MONTH_NAME,
+	Profit_per_sale,
+    Total_Export_value,
+    Profit_margin	
+FROM
+	temp_CTE
+ORDER BY
+	MONTH_NAME
+;
+
+--- Profitability over the years
+With temp_CTE AS (
+				SELECT
+						YEAR(date) AS Years,
+						ROUND(SUM(Profit_per_unit * Units_sold),0) AS Profit_per_sale,
+						ROUND(SUM(Export_value),0) AS Total_Export_value,
+						ROUND((SUM(Profit_per_unit * Units_sold) / NULLIF(SUM(Export_value), 0)),3) * 100 AS Profit_margin
+				FROM
+						nigeria_agricultural_exports 
+				GROUP BY
+						YEAR(date))
+SELECT
+	Years,
+	Profit_per_sale,
+    Total_Export_value,
+    Profit_margin	
+FROM
+	temp_CTE
+ORDER BY
+	Years
+;
+
+---3. Cost Analysis
+---cost of goods sold (COGS) as a percentage of revenue
+
+With Temp2 AS (
+				SELECT
+					Product_Name,
+					Units_Sold,
+					unit_price,
+					Export_Value, 
+					Export_Value - (Units_Sold * Profit_per_unit) AS COGS --(Cost of goods sold)
+				FROM 
+					nigeria_agricultural_exports
+
+					)
+
+SELECT
+	Product_Name,
+	Export_Value AS Revenue,
+	COGS, --(Cost of goods sold)
+	ROUND((COGS/NULLIF(Export_Value,0)),3) * 100 AS COGSP --cost of goods sold (COGS) as a percentage of revenue
+
+FROM 
+	Temp2
+
+------product's total cost of goods sold (COGS) as a percentage of revenue
+CREATE VIEW TCOGSP AS
+With Temp4 AS (
+				SELECT
+					Product_Name, 
+					SUM(Export_Value) AS Revenue,
+					ROUND(SUM(Export_Value - (Units_Sold * Profit_per_unit)),2) AS TCOGS --(Total Cost of goods sold)
+				FROM 
+					nigeria_agricultural_exports
+				GROUP BY
+					Product_Name
+
+					)
+
+SELECT
+	Product_Name,
+	--Revenue,
+	--TCOGS, --(Cost of goods sold)
+	ROUND((TCOGS/NULLIF(Revenue,0)),3) * 100 AS TCOGSP --total cost of goods sold (TCOGS) as a percentage of revenue
+
+FROM 
+	Temp4
+
+---Total Cost of goods sold(COGS) across the products
+CREATE VIEW COGS AS
+SELECT
+	Product_Name AS Product,
+	ROUND(SUM(Export_Value - (Units_Sold * Profit_per_unit)), 2) AS COGS --(Cost of goods sold)
+FROM 
+	nigeria_agricultural_exports
+GROUP BY
+	Product_Name
+								
+
+
+---4. Geographic Analysis
+
+---Exports Volume across destination ports
+SELECT 
+	Destination_Port,
+	SUM(Units_Sold) as Exports_Volume
+FROM
+	nigeria_agricultural_exports
+GROUP BY
+	Destination_Port
+ORDER BY 
+	Exports_Volume DESC
+
+---transportation modes commonly used for export
+SELECT
+	Transportation_Mode,
+	COUNT(*) AS volume
+FROM
+	nigeria_agricultural_exports
+GROUP BY
+	Transportation_Mode
+
+---Ranking the destination port by the export value.
+SELECT
+	Destination_Port,
+	ROW_NUMBER() OVER (ORDER BY SUM(Export_value) DESC) ROW_NUMBER_RANK
+FROM	
+	nigeria_agricultural_exports
+GROUP BY
+	Destination_Port
+
+---the top export product for each port.
+
+SELECT 
+    Destination_Port,
+    Product_name AS top_export_product
+FROM 
+    (SELECT 
+        Product_name,
+        Destination_Port,
+        COUNT(*) AS Number_of_Exports,
+        RANK() OVER (PARTITION BY Destination_Port ORDER BY COUNT(*) DESC) as rank
+    FROM 
+        nigeria_agricultural_exports
+    GROUP BY
+        Product_name,
+        Destination_Port
+    ) Products_Ranking_Per_Destination
+WHERE 
+    rank = 1;
+
+---5.  performance analysis
+
+---product performance in terms of profit margin
+SELECT
+	Product_Name,
+	ROUND((SUM(Profit_per_unit * Units_sold) / NULLIF(SUM(Export_value), 0)),3) * 100 AS Profit_margin	
+FROM
+	nigeria_agricultural_exports
+GROUP BY
+	Product_Name;
+
+---performance comparison of different companies based on units sold and profit generated
+SELECT
+		Company,
+		SUM(Units_Sold) AS Total_Units_Sold,
+		ROUND(SUM(Profit_Per_Unit * Units_Sold),2) AS Profit
+FROM 
+		nigeria_agricultural_exports
+GROUP BY
+		Company ;
+
+---Checking Products performance
+WITH total_profit AS (
+						SELECT 
+								ROUND(SUM(Profit_Per_Unit * Units_Sold),2) AS Total_Profit
+						FROM 
+								nigeria_agricultural_exports
+						)
+
+SELECT
+		Product_Name,
+		SUM(Units_Sold) AS Total_Units_Sold,
+		ROUND(SUM(Profit_Per_Unit * Units_Sold),2) AS Profit,
+		ROUND((SUM(Profit_Per_Unit * Units_Sold) / (SELECT Total_Profit FROM total_profit)) * 100, 2) AS Profit_Percentage
+FROM 
+		nigeria_agricultural_exports
+GROUP BY
+		Product_Name 
+
+ORDER BY
+	Profit DESC;
+
+
+
+
+
+SELECT
+		Company,
+		ROUND(SUM(Profit_Per_Unit * Units_Sold),2) AS Profit
+FROM 
+		nigeria_agricultural_exports
+GROUP BY
+		Company 
+ORDER BY
+	Profit DESC;
+
+---- To Show the Underperforming companies based on the mean profit i.e any company below the  mean profit is underperforming
+WITH MeanProfit AS (
+					SELECT 
+							AVG(Profit) AS Mean_Profit
+					FROM 
+						(
+							SELECT
+									Company, 
+									ROUND(SUM(Profit_Per_Unit * Units_Sold),2) AS Profit
+					FROM 
+							nigeria_agricultural_exports
+					GROUP BY
+							Company
+						) AS Profit_Per_Company ---Companies and their corresponding profits
+					)
+SELECT 
+		Company, 
+		ROUND(SUM(Profit_Per_Unit * Units_Sold),2) AS Profit
+FROM 
+		nigeria_agricultural_exports
+GROUP BY
+		Company
+HAVING
+		ROUND(SUM(Profit_Per_Unit * Units_Sold),2) < (SELECT Mean_Profit FROM MeanProfit)
+													
+ORDER BY
+		Profit DESC;
+
+
+---To Show the Underperforming products based on the mean profit i.e any product below the  mean profit is underperforming
+WITH MeanProfit AS (
+					SELECT 
+							AVG(Profit) AS Mean_Profit
+					FROM 
+						(
+							SELECT
+									Product_Name, 
+									ROUND(SUM(Profit_Per_Unit * Units_Sold),2) AS Profit
+					FROM 
+							nigeria_agricultural_exports
+					GROUP BY
+							Product_Name
+						) AS Profit_Per_Company ---Companies and their corresponding profits
+					)
+SELECT 
+		Product_Name AS Product, 
+		ROUND(SUM(Profit_Per_Unit * Units_Sold),2) AS Profit
+FROM 
+		nigeria_agricultural_exports
+GROUP BY
+		Product_Name
+HAVING
+		ROUND(SUM(Profit_Per_Unit * Units_Sold),2) < (SELECT Mean_Profit FROM MeanProfit)
+													
+ORDER BY
+		Profit DESC;
+
